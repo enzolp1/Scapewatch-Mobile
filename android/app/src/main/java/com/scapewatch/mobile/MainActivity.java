@@ -1,11 +1,16 @@
 package com.scapewatch.mobile;
 
 import android.os.Build;
+import android.os.SystemClock;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
+
+    private static long lastRendererLoss;
 
     @Override
     protected void load() {
@@ -19,6 +24,13 @@ public class MainActivity extends BridgeActivity {
         // document receives the same UI bundle as every subsequent navigation.
         mobileUi.install(webView);
         bridgeBuilder.addWebViewListener(mobileUi);
+        bridgeBuilder.addWebViewListener(new WebViewListener() {
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                recoverFromRendererLoss(view);
+                return true;
+            }
+        });
         super.load();
         tuneForLowEndDevices(webView);
         KeepAliveService.start(this);
@@ -70,6 +82,28 @@ public class MainActivity extends BridgeActivity {
     private static void tuneForLowEndDevices(WebView webView) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+    }
+
+    /**
+     * Lite build: on low-memory phones Android can kill the WebView's renderer
+     * process while the app is in the background. The WebView is then unusable and
+     * shows a black screen. Rebuild the activity (and with it a fresh WebView that
+     * reloads the game) instead. If the renderer dies again right away, close the
+     * app cleanly rather than loop.
+     */
+    private void recoverFromRendererLoss(WebView view) {
+        long now = SystemClock.elapsedRealtime();
+        boolean repeated = now - lastRendererLoss < 15000;
+        lastRendererLoss = now;
+        if (view.getParent() instanceof android.view.ViewGroup) {
+            ((android.view.ViewGroup) view.getParent()).removeView(view);
+        }
+        view.destroy();
+        if (repeated) {
+            finish();
+        } else {
+            recreate();
         }
     }
 
