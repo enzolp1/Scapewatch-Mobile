@@ -33,17 +33,21 @@ jobs:
           npx cap sync android
 
       - name: Restore signing key
+        id: key
         env:
           KEYSTORE_B64: ${{ secrets.LITE_KEYSTORE_B64 }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
-            echo "::error::Falta el secreto LITE_KEYSTORE_B64; sin una clave fija no se puede actualizar la app encima de la anterior."
-            exit 1
+            echo "::warning::Sin el secreto LITE_KEYSTORE_B64 solo se compila una APK de prueba (debug) que no se publica."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lite.keystore"
           echo "SCAPEWATCH_KEYSTORE=$RUNNER_TEMP/lite.keystore" >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Build signed release APK
+        if: steps.key.outputs.signed == 'true'
         env:
           SCAPEWATCH_STORE_PASSWORD: ${{ secrets.LITE_KEYSTORE_PASSWORD }}
           SCAPEWATCH_KEY_PASSWORD: ${{ secrets.LITE_KEYSTORE_PASSWORD }}
@@ -54,12 +58,21 @@ jobs:
           ./gradlew assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Scapewatch-Lite.apk"
 
+      - name: Build test APK (debug)
+        if: steps.key.outputs.signed != 'true'
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Scapewatch-Lite.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: Scapewatch-Lite
           path: Scapewatch-Lite.apk
 
       - name: Publish as a release
+        if: steps.key.outputs.signed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
