@@ -1,0 +1,70 @@
+name: Build Scapewatch Lite APK
+
+on:
+  push:
+    branches: [lite]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build web bundle and sync into Android
+        run: |
+          npm ci
+          npm run build:release
+          npx cap sync android
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.LITE_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Falta el secreto LITE_KEYSTORE_B64; sin una clave fija no se puede actualizar la app encima de la anterior."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lite.keystore"
+          echo "SCAPEWATCH_KEYSTORE=$RUNNER_TEMP/lite.keystore" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        env:
+          SCAPEWATCH_STORE_PASSWORD: ${{ secrets.LITE_KEYSTORE_PASSWORD }}
+          SCAPEWATCH_KEY_PASSWORD: ${{ secrets.LITE_KEYSTORE_PASSWORD }}
+          SCAPEWATCH_KEY_ALIAS: lite
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Scapewatch-Lite.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scapewatch-Lite
+          path: Scapewatch-Lite.apk
+
+      - name: Publish as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="lite-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" Scapewatch-Lite.apk \
+            --title "Scapewatch Lite build ${GITHUB_RUN_NUMBER}" \
+            --notes "Compilado automáticamente desde la rama lite (commit ${GITHUB_SHA::7})." \
+            --target "$GITHUB_SHA"

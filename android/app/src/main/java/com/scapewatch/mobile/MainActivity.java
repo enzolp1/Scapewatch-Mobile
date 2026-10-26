@@ -1,5 +1,6 @@
 package com.scapewatch.mobile;
 
+import android.os.Build;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
@@ -19,6 +20,8 @@ public class MainActivity extends BridgeActivity {
         mobileUi.install(webView);
         bridgeBuilder.addWebViewListener(mobileUi);
         super.load();
+        tuneForLowEndDevices(webView);
+        KeepAliveService.start(this);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             private boolean pending;
 
@@ -57,5 +60,24 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+    }
+
+    /**
+     * Lite build: keep the game's renderer process at high priority even when the
+     * app is in the background, so Android's low-memory killer picks other apps
+     * first and the game does not have to reload and reconnect.
+     */
+    private static void tuneForLowEndDevices(WebView webView) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        if (isFinishing()) {
+            KeepAliveService.stop(this);
+        }
+        super.onDestroy();
     }
 }

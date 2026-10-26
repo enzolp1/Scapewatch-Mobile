@@ -11,7 +11,7 @@ export function initializeRenderer() {
     battery: { dpr: 1, pixels: 700000 },
     original: null,
   };
-  let preferred = 'balanced';
+  let preferred = 'battery';
   try {
     const saved = localStorage.getItem(PREFERENCE_KEYS.renderer);
     if (saved in profiles) preferred = saved;
