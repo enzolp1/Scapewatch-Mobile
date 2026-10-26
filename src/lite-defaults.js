@@ -1,4 +1,4 @@
-import { isGamePage } from './environment.js';
+import { isGamePage, PREFERENCE_KEYS } from './environment.js';
 
 // Lite build: performance-first game settings for low-end phones.
 //
@@ -35,6 +35,10 @@ const LITE_SETTINGS = {
   showLuckXPDrops: false, // can fire on every XP gain
   playerPathAnimation: 'static',
   notificationBackground: false,
+  // Chat: global chat is the busiest feed and keeps re-rendering the chat panel.
+  // Friends, nearby players and game messages stay on; global can be turned
+  // back on in Settings -> Chat.
+  chatShowGlobal: false,
   // Audio decoding costs CPU; stop music while the app is in the background
   musicPauseHidden: true,
 };
@@ -50,6 +54,8 @@ export function applyLiteDefaults() {
       current = {};
     }
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...current, ...LITE_SETTINGS }));
+    // Hide the floating mini chat over the map (the full chat stays in the dock).
+    localStorage.setItem(PREFERENCE_KEYS.chat, 'off');
     localStorage.setItem(MARKER, '1');
   } catch (_) {
     // Storage unavailable: the game simply starts with its own defaults.
